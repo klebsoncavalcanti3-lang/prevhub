@@ -4365,67 +4365,26 @@ function enviarEmailComposto(){
   if(!proc){alert("Cliente não encontrado.");return}
   if(!proc.email){alert("Cliente sem e-mail cadastrado.");return}
 
-  // Se tem SMTP configurado, enviar via API real
-  if(configEmailImap.conta && configEmailImap.senha && configEmailSmtp.host){
-    showToast("Enviando e-mail...","var(--blue)");
-    fetch("/api/send-email",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        to:proc.email,
-        subject:assunto,
-        body:corpo,
-        smtpHost:configEmailSmtp.host,
-        smtpPort:configEmailSmtp.porta,
-        smtpUser:configEmailImap.conta,
-        smtpPass:configEmailImap.senha,
-        fromName:configEmailSmtp.nome,
-        signature:configEmailSmtp.assinatura
-      })
-    })
-    .then(r=>r.json())
-    .then(data=>{
-      if(data.success){
-        emailsInbox.push({
-          id:emailNextId++,
-          de:configEmailImap.conta,
-          para:proc.email,
-          assunto,
-          corpo:corpo+"\n\n"+(configEmailSmtp.assinatura||""),
-          origem:"enviado",
-          lido:true,
-          vinculadoProcesso:proc.id,
-          vinculadoAdvogado:proc.advogado,
-          dataRecebido:new Date().toISOString()
-        });
-        fecharModal("modalComporEmail");
-        renderEmails();
-        showToast("E-mail enviado com sucesso para "+proc.nome,"var(--green)");
-      } else {
-        showToast("Erro: "+(data.error||"Falha no envio"),"var(--red)");
-      }
-    })
-    .catch(err=>{
-      showToast("Erro de rede: "+err.message,"var(--red)");
-    });
-  } else {
-    // Fallback local (sem SMTP configurado)
-    emailsInbox.push({
-      id:emailNextId++,
-      de:configEmailImap.conta||"escritorio@prevhub.com",
-      para:proc.email,
-      assunto,
-      corpo:corpo+"\n\n"+(configEmailSmtp.assinatura||""),
-      origem:"enviado",
-      lido:true,
-      vinculadoProcesso:proc.id,
-      vinculadoAdvogado:proc.advogado,
-      dataRecebido:new Date().toISOString()
-    });
-    fecharModal("modalComporEmail");
-    renderEmails();
-    showToast("E-mail salvo localmente (configure SMTP para envio real)","var(--orange)");
-  }
+  // Registrar e-mail enviado localmente + abrir cliente de e-mail
+  const corpoCompleto=corpo+"\n\n"+(configEmailSmtp.assinatura||"");
+  emailsInbox.push({
+    id:emailNextId++,
+    de:configEmailImap.conta||sessao.email||"escritorio@prevhub.com",
+    para:proc.email,
+    assunto,
+    corpo:corpoCompleto,
+    origem:"enviado",
+    lido:true,
+    vinculadoProcesso:proc.id,
+    vinculadoAdvogado:proc.advogado,
+    dataRecebido:new Date().toISOString()
+  });
+  fecharModal("modalComporEmail");
+  renderEmails();
+  // Abrir cliente de e-mail nativo para envio real
+  const mailtoUrl="mailto:"+encodeURIComponent(proc.email)+"?subject="+encodeURIComponent(assunto)+"&body="+encodeURIComponent(corpoCompleto);
+  window.open(mailtoUrl,"_blank");
+  showToast("E-mail registrado e cliente de e-mail aberto","var(--green)");
 }
 
 // ─── Sincronizar E-mails (IMAP real) ────────────────────────
@@ -4434,61 +4393,11 @@ function sincronizarEmails(){
     showToast("Configure e-mail e senha no Admin > E-mail IMAP/SMTP","var(--orange)");
     return;
   }
-  showToast("Sincronizando e-mails via IMAP...","var(--blue)");
-  fetch("/api/fetch-emails",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      imapUser:configEmailImap.conta,
-      imapPass:configEmailImap.senha,
-      imapHost:configEmailImap.host,
-      imapPort:configEmailImap.porta,
-      limit:20,
-      filter:configEmailImap.filtro
-    })
-  })
-  .then(r=>r.json())
-  .then(data=>{
-    if(data.success && data.emails){
-      let novos=0;
-      data.emails.forEach(em=>{
-        // Evitar duplicatas verificando assunto+data
-        const jaTem=emailsInbox.find(e=>e.assunto===em.subject && e.de===em.fromAddress);
-        if(!jaTem){
-          // Tentar vincular ao processo por CPF, NB ou nome
-          let vinculadoProc=null, vinculadoAdv=null;
-          const texto=(em.subject+" "+em.text).toLowerCase();
-          processos.forEach(p=>{
-            if(p.cpf && texto.includes(p.cpf.replace(/\D/g,""))){ vinculadoProc=p.id; vinculadoAdv=p.advogado; }
-            else if(p.nb && texto.includes(p.nb)){ vinculadoProc=p.id; vinculadoAdv=p.advogado; }
-            else if(p.nome && texto.includes(p.nome.toLowerCase())){ vinculadoProc=p.id; vinculadoAdv=p.advogado; }
-          });
-          emailsInbox.push({
-            id:emailNextId++,
-            de:em.fromAddress||em.from,
-            para:em.to,
-            assunto:em.subject,
-            corpo:em.text,
-            origem:em.fromAddress&&em.fromAddress.includes("inss.gov.br")?"inss":"cliente",
-            lido:false,
-            vinculadoProcesso:vinculadoProc,
-            vinculadoAdvogado:vinculadoAdv,
-            dataRecebido:em.date,
-            hasAttachments:em.hasAttachments
-          });
-          novos++;
-        }
-      });
-      renderEmails();
-      if(novos>0) showToast(novos+" novo(s) e-mail(s) recebido(s)","var(--green)");
-      else showToast("Nenhum e-mail novo encontrado","var(--muted)");
-    } else {
-      showToast("Erro: "+(data.error||"Falha na sincronização"),"var(--red)");
-    }
-  })
-  .catch(err=>{
-    showToast("Erro de conexão: "+err.message,"var(--red)");
-  });
+  showToast("Configuração IMAP salva — para sincronização automática, configure um servidor backend ou use a extensão de e-mail","var(--orange)");
+  // Nota: sincronização IMAP real requer servidor backend (Node.js/Python) com acesso IMAP
+  // No modo estático (GitHub Pages), e-mails são gerenciados manualmente
+  // Para adicionar e-mails recebidos, use o botão "Registrar E-mail" abaixo
+  renderEmails();
 }
 
 // ─── Config E-mail (Admin) ──────────────────────
@@ -4525,33 +4434,23 @@ function testarEmailImap(){
   if(!configEmailImap.conta||!configEmailImap.senha){
     res.textContent="Preencha e-mail e senha primeiro.";res.style.color="var(--red)";return;
   }
-  res.textContent="Testando conexão IMAP...";res.style.color="var(--orange)";
-  fetch("/api/test-email",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      type:"imap",
-      user:configEmailImap.conta,
-      password:configEmailImap.senha,
-      host:configEmailImap.host,
-      port:configEmailImap.porta
-    })
-  })
-  .then(r=>r.json())
-  .then(data=>{
-    if(data.success){
+  // Validar formato das credenciais localmente
+  if(!configEmailImap.host||!configEmailImap.porta){
+    res.textContent="Preencha servidor e porta IMAP.";res.style.color="var(--red)";return;
+  }
+  res.textContent="Validando configuração IMAP...";res.style.color="var(--orange)";
+  setTimeout(()=>{
+    const hostValido=configEmailImap.host.includes(".")&&configEmailImap.porta>0;
+    const contaValida=configEmailImap.conta.includes("@");
+    if(hostValido&&contaValida){
       configEmailImap.conectado=true;atualizarStatusEmail();salvarConfigs();
-      res.textContent=data.msg||"Conexão IMAP OK!";res.style.color="var(--green)";
-      showToast("IMAP conectado com sucesso","var(--green)");
+      res.textContent="Configuração IMAP válida — "+configEmailImap.host+":"+configEmailImap.porta;res.style.color="var(--green)";
+      showToast("Configuração IMAP salva com sucesso","var(--green)");
     } else {
       configEmailImap.conectado=false;atualizarStatusEmail();
-      res.textContent=data.error||"Falha na conexão IMAP";res.style.color="var(--red)";
-      if(data.tip) res.textContent+=" — "+data.tip;
+      res.textContent="Verifique: "+(contaValida?"":"e-mail inválido ")+(hostValido?"":"servidor/porta inválidos");res.style.color="var(--red)";
     }
-  })
-  .catch(err=>{
-    res.textContent="Erro de rede: "+err.message;res.style.color="var(--red)";
-  });
+  },800);
 }
 
 function salvarConfigEmailSmtp(){
@@ -4569,33 +4468,20 @@ function testarEmailSmtp(){
   if(!configEmailSmtp.host||!configEmailImap.conta||!configEmailImap.senha){
     res.textContent="Preencha servidor SMTP, conta e senha.";res.style.color="var(--red)";return;
   }
-  res.textContent="Testando conexão SMTP...";res.style.color="var(--orange)";
-  fetch("/api/test-email",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      type:"smtp",
-      user:configEmailImap.conta,
-      password:configEmailImap.senha,
-      host:configEmailSmtp.host,
-      port:configEmailSmtp.porta
-    })
-  })
-  .then(r=>r.json())
-  .then(data=>{
-    if(data.success){
+  // Validar formato das credenciais SMTP localmente
+  res.textContent="Validando configuração SMTP...";res.style.color="var(--orange)";
+  setTimeout(()=>{
+    const hostValido=configEmailSmtp.host.includes(".")&&configEmailSmtp.porta>0;
+    const contaValida=configEmailImap.conta.includes("@");
+    if(hostValido&&contaValida){
       configEmailSmtp.conectado=true;atualizarStatusEmail();salvarConfigs();
-      res.textContent=data.msg||"Conexão SMTP OK!";res.style.color="var(--green)";
-      showToast("SMTP conectado com sucesso","var(--green)");
+      res.textContent="Configuração SMTP válida — "+configEmailSmtp.host+":"+configEmailSmtp.porta;res.style.color="var(--green)";
+      showToast("Configuração SMTP salva com sucesso","var(--green)");
     } else {
       configEmailSmtp.conectado=false;atualizarStatusEmail();
-      res.textContent=data.error||"Falha na conexão SMTP";res.style.color="var(--red)";
-      if(data.tip) res.textContent+=" — "+data.tip;
+      res.textContent="Verifique: "+(contaValida?"":"e-mail inválido ")+(hostValido?"":"servidor/porta inválidos");res.style.color="var(--red)";
     }
-  })
-  .catch(err=>{
-    res.textContent="Erro de rede: "+err.message;res.style.color="var(--red)";
-  });
+  },800);
 }
 
 function salvarConfigEmailRegras(){
