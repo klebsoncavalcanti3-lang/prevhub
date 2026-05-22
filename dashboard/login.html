@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrevHub — Login</title>
+<style>
+  :root { --bg:#0f1117; --card:#1a1d27; --border:#2a2d3a; --text:#e4e4e7; --muted:#8b8d97; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center}
+
+  .login-container{width:100%;max-width:460px;padding:20px}
+  .login-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:40px 36px;text-align:center}
+  .logo{font-size:38px;font-weight:800;margin-bottom:10px;letter-spacing:-0.5px;text-shadow:0 0 25px rgba(59,130,246,0.3)}
+  .logo span{background:linear-gradient(135deg,#3b82f6,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .subtitle{font-size:15px;color:var(--muted);margin-bottom:32px}
+
+  .form-group{text-align:left;margin-bottom:20px}
+  .form-group label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+  .form-group input{width:100%;padding:13px 15px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;transition:border 0.2s}
+  .form-group input:focus{border-color:var(--blue)}
+  .form-group input::placeholder{color:#555}
+
+  .error-msg{color:var(--red);font-size:13px;margin-bottom:12px;display:none}
+  .debug-msg{color:var(--green);font-size:11px;margin-top:8px;display:none;text-align:left;background:rgba(34,197,94,0.08);padding:8px 12px;border-radius:8px;word-break:break-all}
+
+  .btn-login{width:100%;padding:15px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;transition:background 0.2s;margin-top:8px}
+  .btn-login:hover{background:#2563eb}
+  .btn-login:active{transform:scale(0.98)}
+
+  .footer-text{font-size:13px;color:var(--muted);margin-top:24px}
+  .footer-text a{color:var(--blue);text-decoration:none}
+
+  .user-count{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.1);color:var(--blue);padding:7px 16px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:24px}
+  .user-count .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  .admin-link{display:inline-block;margin-top:16px;font-size:13px;color:var(--muted);cursor:pointer;text-decoration:underline}
+  .admin-link:hover{color:var(--blue)}
+
+  .reset-link{display:inline-block;margin-top:8px;font-size:11px;color:var(--muted);cursor:pointer;opacity:0.5}
+  .reset-link:hover{color:var(--red);opacity:1}
+</style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="login-card">
+    <div class="logo"><span>Prev</span>Hub</div>
+    <div class="subtitle">Plataforma de Gestão Previdenciária</div>
+
+    <div class="user-count"><div class="dot"></div> <span id="licCount">carregando...</span></div>
+
+    <div class="form-group">
+      <label>E-mail ou Usuário</label>
+      <input type="text" id="loginUser" placeholder="seu.email@escritorio.com" autofocus>
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input type="password" id="loginPass" placeholder="••••••••">
+    </div>
+
+    <div class="error-msg" id="errorMsg">Usuário ou senha inválidos.</div>
+    <div class="debug-msg" id="debugMsg"></div>
+
+    <button class="btn-login" onclick="fazerLogin()">Entrar</button>
+
+    <div class="footer-text">
+      Esqueceu a senha? <a href="#" onclick="alert('Funcionalidade de recuperação será enviada por e-mail.')">Recuperar acesso</a>
+    </div>
+
+    <a class="admin-link" onclick="toggleAdmin()">Painel de administração</a>
+    <br>
+    <a class="reset-link" onclick="forcarReset()">Resetar dados (caso de erro persistente)</a>
+  </div>
+</div>
+
+<script>
+// ─── Verificar disponibilidade do Storage (Safari modo privado) ──
+function storageDisponivel(tipo){
+  try{const s=tipo==="local"?localStorage:sessionStorage;s.setItem("_t","1");s.removeItem("_t");return true;}catch(e){return false;}
+}
+const TEM_LOCAL_STORAGE=storageDisponivel("local");
+const TEM_SESSION_STORAGE=storageDisponivel("session");
+if(!TEM_LOCAL_STORAGE||!TEM_SESSION_STORAGE){
+  document.addEventListener("DOMContentLoaded",function(){
+    const errEl=document.getElementById("errorMsg");
+    if(errEl){
+      errEl.textContent="Navegador em modo privado ou sem suporte a armazenamento local. Desative o modo privado/anonymous para usar o PrevHub.";
+      errEl.style.display="block";errEl.style.color="#f59e0b";
+    }
+  });
+}
+// ─── Limpar sessões antigas/incompatíveis ──
+if(TEM_SESSION_STORAGE&&sessionStorage.getItem("acessoprev_sessao")) sessionStorage.removeItem("acessoprev_sessao");
+
+// ─── VERSÃO DO BANCO — auto-reset se incompatível ──
+const VERSAO_DB = "v4";
+if(localStorage.getItem("prevhub_db_version") !== VERSAO_DB){
+  console.log("[PrevHub] Reset de versão: "+localStorage.getItem("prevhub_db_version")+" → "+VERSAO_DB);
+  ["prevhub_usuarios","prevhub_processos","prevhub_mensagens","prevhub_colunas","prevhub_tipos","prevhub_configs","prevhub_agenda","prevhub_chat","prevhub_chat_canais","prevhub_documentos"].forEach(k=>localStorage.removeItem(k));
+  localStorage.setItem("prevhub_db_version", VERSAO_DB);
+}
+
+// ─── Usuário padrão (admin) ──
+const USUARIOS_PADRAO = [
+  { id:1, user:"klebson", email:"klebsoncavalcanti3@gmail.com", senha:"admin123", nome:"Dr. Klebson Cavalcanti", papel:"admin", ativo:true, acessoAdmin:true },
+];
+
+// ─── Carregar usuários do localStorage ──
+function carregarUsuarios(){
+  const salvo = localStorage.getItem("prevhub_usuarios");
+  console.log("[PrevHub Login] localStorage prevhub_usuarios:", salvo ? "encontrado ("+salvo.length+" chars)" : "VAZIO");
+
+  if(salvo){
+    try{
+      const lista = JSON.parse(salvo);
+      if(Array.isArray(lista) && lista.length > 0){
+        // Migrar usuários antigos sem campos obrigatórios
+        let migrou = false;
+        lista.forEach(u => {
+          if(!u.senha){ u.senha = "mudar123"; migrou = true; }
+          if(!u.user){
+            u.user = u.email ? u.email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g,"") : "user"+u.id;
+            migrou = true;
+          }
+        });
+        if(migrou){
+          localStorage.setItem("prevhub_usuarios", JSON.stringify(lista));
+          console.log("[PrevHub Login] Migração aplicada");
+        }
+        console.log("[PrevHub Login] Carregados "+lista.length+" usuários do localStorage");
+        return lista;
+      }
+    } catch(e){
+      console.error("[PrevHub Login] Erro ao parsear localStorage:", e);
+    }
+  }
+
+  // Não existe no localStorage — salvar padrão
+  console.log("[PrevHub Login] Inicializando com usuários padrão");
+  localStorage.setItem("prevhub_usuarios", JSON.stringify(USUARIOS_PADRAO));
+  return JSON.parse(JSON.stringify(USUARIOS_PADRAO));
+}
+
+let USUARIOS_DB = carregarUsuarios();
+
+// Atualizar contagem
+const ativos = USUARIOS_DB.filter(u => u.ativo).length;
+document.getElementById("licCount").textContent = ativos + " de 50 licenças em uso";
+
+// ─── Rate Limiting ───
+let tentativasLogin = 0;
+let bloqueadoAte = 0;
+const MAX_TENTATIVAS = 5;
+const TEMPO_BLOQUEIO = 60000;
+
+// ─── Hash de integridade ───
+function gerarHash(obj){
+  const str = JSON.stringify(obj);
+  let hash = 0;
+  for(let i = 0; i < str.length; i++){
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return "ph_" + Math.abs(hash).toString(36);
+}
+
+// ─── LOGIN ───
+function fazerLogin() {
+  if(!TEM_LOCAL_STORAGE||!TEM_SESSION_STORAGE){
+    const errEl=document.getElementById("errorMsg");
+    errEl.textContent="Armazenamento local indisponivel. Desative o modo privado do navegador.";
+    errEl.style.display="block";return;
+  }
+  // RECARREGAR do localStorage a cada tentativa (caso admin adicionou usuário em outra aba)
+  USUARIOS_DB = carregarUsuarios();
+
+  const userInput = document.getElementById("loginUser").value.trim().toLowerCase();
+  const passInput = document.getElementById("loginPass").value;
+  const errEl = document.getElementById("errorMsg");
+  const debugEl = document.getElementById("debugMsg");
+
+  // Verificar bloqueio
+  if(Date.now() < bloqueadoAte){
+    const seg = Math.ceil((bloqueadoAte - Date.now()) / 1000);
+    errEl.textContent = "Muitas tentativas. Aguarde " + seg + "s.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  if(!userInput || !passInput){
+    errEl.textContent = "Preencha usuário e senha.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  // Buscar usuário — comparação case-insensitive e trim
+  const encontrado = USUARIOS_DB.find(u => {
+    const matchUser = (u.user || "").toLowerCase().trim() === userInput;
+    const matchEmail = (u.email || "").toLowerCase().trim() === userInput;
+    const matchSenha = (u.senha || "") === passInput;
+    const estaAtivo = u.ativo === true;
+    return (matchUser || matchEmail) && matchSenha && estaAtivo;
+  });
+
+  if (encontrado) {
+    tentativasLogin = 0;
+    const sessao = {
+      id: encontrado.id,
+      nome: encontrado.nome,
+      papel: encontrado.papel,
+      email: encontrado.email,
+      acessoAdmin: encontrado.acessoAdmin === true,
+      loginAt: new Date().toISOString()
+    };
+    sessao._hash = gerarHash(sessao);
+    try{sessionStorage.setItem("prevhub_sessao", JSON.stringify(sessao));}catch(e){
+      errEl.textContent="Erro ao salvar sessão. Desative modo privado.";errEl.style.display="block";return;
+    }
+    console.log("[PrevHub Login] Login OK para: " + encontrado.nome);
+    window.location.href = "kanban.html";
+  } else {
+    tentativasLogin++;
+
+    // Debug: mostrar info para diagnosticar
+    const usuarioEncontrado = USUARIOS_DB.find(u =>
+      (u.user || "").toLowerCase().trim() === userInput ||
+      (u.email || "").toLowerCase().trim() === userInput
+    );
+
+    let debugInfo = "";
+    if(!usuarioEncontrado){
+      debugInfo = "Usuário '" + userInput + "' não encontrado. Usuários cadastrados: " +
+        USUARIOS_DB.map(u => u.user + " / " + u.email).join(", ");
+    } else {
+      debugInfo = "Usuário encontrado: " + usuarioEncontrado.nome +
+        " | Ativo: " + usuarioEncontrado.ativo +
+        " | Senha cadastrada tem " + (usuarioEncontrado.senha||"").length + " caracteres" +
+        " | Senha digitada tem " + passInput.length + " caracteres";
+      if(usuarioEncontrado.senha !== passInput){
+        debugInfo += " | ⚠ SENHAS NÃO CONFEREM";
+      }
+      if(!usuarioEncontrado.ativo){
+        debugInfo += " | ⚠ USUÁRIO INATIVO";
+      }
+    }
+
+    debugEl.textContent = debugInfo;
+    debugEl.style.display = "block";
+
+    if(tentativasLogin >= MAX_TENTATIVAS){
+      bloqueadoAte = Date.now() + TEMPO_BLOQUEIO;
+      errEl.textContent = "Bloqueado por 60 segundos (" + MAX_TENTATIVAS + " tentativas falhas).";
+    } else {
+      errEl.textContent = "Usuário ou senha inválidos. (" + (MAX_TENTATIVAS - tentativasLogin) + " tentativas restantes)";
+    }
+    errEl.style.display = "block";
+    document.getElementById("loginPass").value = "";
+
+    setTimeout(() => {
+      errEl.style.display = "none";
+      errEl.textContent = "Usuário ou senha inválidos.";
+    }, 8000);
+  }
+}
+
+// ─── Enter para login ───
+document.getElementById("loginPass").addEventListener("keydown", e => { if(e.key === "Enter") fazerLogin(); });
+document.getElementById("loginUser").addEventListener("keydown", e => { if(e.key === "Enter") document.getElementById("loginPass").focus(); });
+
+function toggleAdmin() {
+  alert("Faça login com conta admin para gerenciar colaboradores, papéis e permissões.");
+}
+
+// ─── Forçar reset de dados (emergência) ──
+function forcarReset(){
+  if(!confirm("Isso vai limpar TODOS os dados locais e resetar para o padrão (apenas Dr. Klebson). Continuar?")) return;
+  localStorage.removeItem("prevhub_usuarios");
+  localStorage.removeItem("prevhub_db_version");
+  sessionStorage.clear();
+  alert("Dados resetados. A página será recarregada.");
+  location.reload();
+}
+</script>
+</body>
+</html>
