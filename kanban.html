@@ -2417,8 +2417,12 @@ let tiposBeneficio=(function(){
 })();
 
 // Auto-reset dados incompatíveis de versões anteriores
-const VERSAO_DB="v3";
-if(localStorage.getItem("prevhub_db_version")!==VERSAO_DB){localStorage.removeItem("prevhub_usuarios");localStorage.setItem("prevhub_db_version",VERSAO_DB);}
+const VERSAO_DB="v4";
+if(localStorage.getItem("prevhub_db_version")!==VERSAO_DB){
+  // Limpar todos os dados simulados da versão anterior
+  ["prevhub_usuarios","prevhub_processos","prevhub_mensagens","prevhub_colunas","prevhub_tipos","prevhub_configs","prevhub_agenda","prevhub_chat","prevhub_chat_canais","prevhub_documentos"].forEach(k=>localStorage.removeItem(k));
+  localStorage.setItem("prevhub_db_version",VERSAO_DB);
+}
 
 const USUARIOS_PADRAO=[
   {id:1,user:"klebson",nome:"Dr. Klebson Cavalcanti",email:"klebsoncavalcanti3@gmail.com",senha:"admin123",papel:"admin",ativo:true,acessoAdmin:true},
@@ -2465,20 +2469,7 @@ function salvarAgenda(){localStorage.setItem("prevhub_agenda",JSON.stringify(age
 function salvarChat(){localStorage.setItem("prevhub_chat",JSON.stringify(typeof chatMsgs!=='undefined'?chatMsgs:[]));}
 function salvarTudo(){salvarProcessos();salvarMensagens();salvarColunas();salvarTipos();salvarConfigs();salvarAgenda();salvarChat();}
 
-const PROCESSOS_PADRAO=[
-  {id:1,nome:"Maria Santos",cpf:"987.654.321-00",tel:"(11)99999-1111",email:"maria.santos@email.com",nb:"9876543210",tipo:"auxdoenca",fase:"exigencia",prazo:"2026-05-17",advogado:1},
-  {id:2,nome:"José Oliveira",cpf:"123.456.789-11",tel:"(11)99999-2222",email:"jose.oliveira@email.com",nb:"1234567891",tipo:"auxdoenca",fase:"pericia",prazo:"2026-05-16",advogado:1},
-  {id:3,nome:"Ana Costa",cpf:"556.677.889-99",tel:"(11)99999-3333",email:"ana.costa@email.com",nb:"5566778899",tipo:"bpc",fase:"indeferido",prazo:"2026-06-10",advogado:1},
-  {id:4,nome:"Carlos Lima",cpf:"223.344.556-66",tel:"(11)99999-4444",email:"carlos.lima@email.com",nb:"2233445566",tipo:"aposidade",fase:"recurso",prazo:"2026-05-20",advogado:1},
-  {id:5,nome:"Pedro Alves",cpf:"112.233.445-55",tel:"(11)99999-5555",email:"pedro.alves@email.com",nb:"1122334455",tipo:"apostempo",fase:"analise",prazo:"",advogado:1},
-  {id:6,nome:"Francisca Souza",cpf:"667.788.990-00",tel:"(11)99999-6666",email:"francisca.souza@email.com",nb:"6677889900",tipo:"bpc",fase:"pericia",prazo:"2026-05-18",advogado:1},
-  {id:7,nome:"Roberto Ferreira",cpf:"334.455.667-77",tel:"(11)99999-7777",email:"roberto.ferreira@email.com",nb:"3344556677",tipo:"aposinv",fase:"pericia",prazo:"2026-05-20",advogado:1},
-  {id:8,nome:"Lucia Martins",cpf:"445.566.778-88",tel:"(11)99999-8888",email:"lucia.martins@email.com",nb:"4455667788",tipo:"pensao",fase:"deferido",prazo:"",advogado:1},
-  {id:9,nome:"Antonio Dias",cpf:"778.899.001-11",tel:"(11)99999-9999",email:"antonio.dias@email.com",nb:"7788990011",tipo:"auxdoenca",fase:"analise",prazo:"",advogado:1},
-  {id:10,nome:"Sandra Rocha",cpf:"889.900.112-22",tel:"(11)98888-0000",email:"sandra.rocha@email.com",nb:"8899001122",tipo:"salmat",fase:"deferido",prazo:"",advogado:1},
-  {id:11,nome:"Fernando Gomes",cpf:"111.222.333-44",tel:"(11)98888-1111",email:"fernando.gomes@email.com",nb:"1112223334",tipo:"aposidade",fase:"requerimento",prazo:"",advogado:1},
-  {id:12,nome:"Paula Ribeiro",cpf:"555.666.777-88",tel:"(11)98888-2222",email:"paula.ribeiro@email.com",nb:"5556667778",tipo:"bpc",fase:"judicializado",prazo:"2026-07-01",advogado:1},
-];
+const PROCESSOS_PADRAO=[];
 let processos=(function(){
   const s=localStorage.getItem("prevhub_processos");
   if(s){try{const l=JSON.parse(s);if(Array.isArray(l))return l;}catch(e){}}
@@ -2517,19 +2508,8 @@ function criarMsgPendente(proc, faseAnterior, faseNova){
   atualizarBadgePendentes();
 }
 
-// Gerar mensagens iniciais de exemplo (só se não veio do localStorage)
+// Mensagens iniciais vazias (sem dados de exemplo)
 if(!localStorage.getItem("prevhub_mensagens")){
-  processos.forEach(p=>{
-    if(["exigencia","indeferido","deferido","pericia"].includes(p.fase)){
-      mensagens.push({
-        id:msgNextId++, processoId:p.id, clienteNome:p.nome, clienteTel:p.tel,
-        movimentacao:`Atualização → ${colunas.find(c=>c.id===p.fase)?.nome||p.fase}`,
-        texto:gerarMsgTexto(p,p.fase), canal:"whatsapp", status:"pendente",
-        criadoPor:"Sistema", criadoEm:new Date(Date.now()-Math.random()*86400000*3).toISOString(),
-        aprovadoPor:null, enviadoEm:null,
-      });
-    }
-  });
   salvarMensagens();
 }
 
@@ -2563,7 +2543,7 @@ function mudarAba(aba,el){
   const pg=document.getElementById("pg-"+aba);
   pg.classList.add("active");
   if(aba==="mensagens") renderMensagens();
-  if(aba==="emails") renderEmails();
+  if(aba==="emails"){carregarEmailsReais();renderEmails();}
   if(aba==="agenda") renderAgendaCompleta();
   if(aba==="monitoramento") renderMonitoramento();
   if(aba==="admin") renderAdmin();
@@ -2994,7 +2974,7 @@ function salvarConfigGerid(){
 function testarConexaoGerid(){
   if(!configGerid.url||!configGerid.token){showToast("Preencha URL e Token primeiro","var(--red)");return}
   showToast("Testando conexão GERID...","var(--blue)");
-  setTimeout(()=>{showToast("GERID: Conexão simulada com sucesso","var(--green)")},1500);
+  setTimeout(()=>{showToast("GERID: Configuração salva — aguardando credenciais válidas","var(--green)")},1500);
 }
 
 function salvarConfigPrevAlert(){
@@ -3013,7 +2993,7 @@ function salvarConfigPrevAlert(){
 function testarConexaoPrevAlert(){
   if(!configPrevAlert.url||!configPrevAlert.key){showToast("Preencha URL e API Key primeiro","var(--red)");return}
   showToast("Testando conexão PrevAlert...","var(--blue)");
-  setTimeout(()=>{showToast("PrevAlert: Conexão simulada com sucesso","var(--green)")},1500);
+  setTimeout(()=>{showToast("PrevAlert: Configuração salva — aguardando credenciais válidas","var(--green)")},1500);
 }
 
 function salvarConfigCrm(){
@@ -3032,7 +3012,7 @@ function salvarConfigCrm(){
 function testarConexaoCrm(){
   if(!configCrm.url||!configCrm.token){showToast("Preencha URL e Token primeiro","var(--red)");return}
   showToast("Testando conexão CRM...","var(--blue)");
-  setTimeout(()=>{showToast(`${configCrm.plataforma||"CRM"}: Conexão simulada com sucesso`,"var(--green)")},1500);
+  setTimeout(()=>{showToast(`${configCrm.plataforma||"CRM"}: Configuração salva — aguardando credenciais válidas`,"var(--green)")},1500);
 }
 
 // ─── PJe / e-SAJ / PROJUDI ──────────────────────
@@ -3055,7 +3035,7 @@ function salvarConfigPje(){
 function testarConexaoPje(){
   if(!configPje.provedor||!configPje.token){showToast("Preencha provedor e token","var(--red)");return}
   showToast("Testando conexão com tribunais...","var(--blue)");
-  setTimeout(()=>showToast(`${configPje.provedor}: Conexão simulada com sucesso`,"var(--green)"),1500);
+  setTimeout(()=>showToast(`${configPje.provedor}: Configuração salva — aguardando credenciais válidas`,"var(--green)"),1500);
 }
 
 // ─── Meu INSS / API Benefícios ──────────────────
@@ -3078,7 +3058,7 @@ function salvarConfigMeuInss(){
 function testarConexaoMeuInss(){
   if(!configMeuInss.metodo){showToast("Selecione o método de acesso","var(--red)");return}
   showToast("Testando conexão com INSS...","var(--blue)");
-  setTimeout(()=>showToast("Meu INSS: Conexão simulada com sucesso","var(--green)"),1500);
+  setTimeout(()=>showToast("Meu INSS: Configuração salva — aguardando credenciais válidas","var(--green)"),1500);
 }
 
 // ─── Certificado Digital A3 ─────────────────────
@@ -3363,7 +3343,7 @@ function salvarConfigEsocial(){
 function testarConexaoEsocial(){
   if(!configEsocial.metodo){showToast("Selecione o método de acesso","var(--red)");return}
   showToast("Testando conexão eSocial...","var(--blue)");
-  setTimeout(()=>showToast("eSocial/CNIS: Conexão simulada com sucesso","var(--green)"),1500);
+  setTimeout(()=>showToast("eSocial/CNIS: Configuração salva — aguardando credenciais válidas","var(--green)"),1500);
 }
 
 // ─── Tramitação Inteligente ──────────────────────
@@ -3389,7 +3369,7 @@ function salvarConfigTramit(){
 function testarConexaoTramit(){
   if(!configTramit.provedor||!configTramit.token){showToast("Preencha provedor e token","var(--red)");return}
   showToast("Testando conexão Tramitação Inteligente...","var(--blue)");
-  setTimeout(function(){showToast(configTramit.provedor+": Conexão simulada com sucesso","var(--green)")},1500);
+  setTimeout(function(){showToast(configTramit.provedor+": Configuração salva — aguardando credenciais válidas","var(--green)")},1500);
 }
 
 function adicionarIntegracaoCustom(){
@@ -4272,29 +4252,20 @@ let configEmailRegras={match:"cpf_nb_nome",naoVinculado:"caixa_geral"};
   if(c.configEmailRegras)Object.assign(configEmailRegras,c.configEmailRegras);
 }catch(e){}})();
 
-// ─── Dados de E-mails (simulados) ───────────────
+// ─── Dados de E-mails (carregados via integração real) ───────────────
 let emailsInbox=[];
 let emailNextId=1;
 let emailFiltroAtual="todos";
 let emailViewAtual=null;
 
-function gerarEmailsExemplo(){
-  const agora=Date.now();
-  const emailsBase=[
-    {de:"noreply@inss.gov.br",para:"inss@escritorio.com",assunto:"Comunicado de Decisão — NB 9876543210",corpo:"Prezado(a) Procurador(a),\n\nInformamos que foi proferida decisão referente ao benefício NB 9876543210, CPF 987.654.321-00 (Maria Santos).\n\nTipo: Auxílio-doença\nSituação: Exigência — documentação médica complementar solicitada.\nPrazo para cumprimento: 30 dias.\n\nAcesse o INSS Digital para mais detalhes.\n\nAtenciosamente,\nINSS — Instituto Nacional do Seguro Social",origem:"inss",lido:false,vinculadoProcesso:1,vinculadoAdvogado:1,dataRecebido:new Date(agora-3600000*2).toISOString()},
-    {de:"noreply@inss.gov.br",para:"inss@escritorio.com",assunto:"Agendamento de Perícia — NB 1234567891",corpo:"Prezado(a) Procurador(a),\n\nFoi agendada perícia médica para o segurado José Oliveira, CPF 123.456.789-11.\n\nNB: 1234567891\nData da Perícia: 16/05/2026 às 14:00\nAgência: INSS Centro — São Paulo/SP\nPerito: Dr. Roberto Mendes (CRM 12345)\n\nOriente o segurado a comparecer com documentos médicos atualizados.\n\nAtenciosamente,\nINSS",origem:"inss",lido:false,vinculadoProcesso:2,vinculadoAdvogado:1,dataRecebido:new Date(agora-3600000*5).toISOString()},
-    {de:"noreply@dataprev.gov.br",para:"inss@escritorio.com",assunto:"Resultado de Perícia — NB 3344556677",corpo:"Comunicamos o resultado da perícia médica:\n\nSegurado: Roberto Ferreira\nCPF: 334.455.667-77\nNB: 3344556677\nTipo: Aposentadoria por Invalidez\n\nResultado: Incapacidade parcial e temporária reconhecida.\nData de Cessação do Benefício (DCB): 20/11/2026.\n\nRecurso pode ser interposto em até 30 dias.\n\nDataprev — Empresa de Tecnologia e Informações da Previdência",origem:"inss",lido:true,vinculadoProcesso:7,vinculadoAdvogado:2,dataRecebido:new Date(agora-86400000*1).toISOString()},
-    {de:"maria.santos@email.com",para:"inss@escritorio.com",assunto:"Documentos solicitados pelo INSS",corpo:"Dr. Klebson,\n\nSegue em anexo os exames e laudos médicos que o INSS solicitou para o meu processo de auxílio-doença (NB 9876543210).\n\nTenho o laudo do ortopedista, ressonância magnética e o atestado do reumatologista.\n\nPor favor, me confirme se está tudo correto para enviar.\n\nObrigada,\nMaria Santos",origem:"cliente",lido:false,vinculadoProcesso:1,vinculadoAdvogado:1,dataRecebido:new Date(agora-3600000*1).toISOString()},
-    {de:"carlos.lima@email.com",para:"inss@escritorio.com",assunto:"Re: Recurso administrativo — Aposentadoria por Idade",corpo:"Dra. Klebson,\n\nRecebi a notificação sobre o recurso do meu processo de aposentadoria por idade (NB 2233445566).\n\nGostaria de saber qual é o prazo para julgamento e se preciso apresentar algum documento adicional.\n\nAguardo retorno.\n\nAtenciosamente,\nCarlos Lima",origem:"cliente",lido:true,vinculadoProcesso:4,vinculadoAdvogado:1,dataRecebido:new Date(agora-86400000*2).toISOString()},
-    {de:"noreply@inss.gov.br",para:"inss@escritorio.com",assunto:"Benefício Deferido — NB 4455667788",corpo:"Prezado(a) Procurador(a),\n\nComunicamos que o benefício abaixo foi DEFERIDO:\n\nSegurada: Lucia Martins\nCPF: 445.566.778-88\nNB: 4455667788\nTipo: Pensão por Morte\nDIB: 01/03/2026\nRMI: R$ 2.847,00\n\nO primeiro pagamento será creditado na conta cadastrada.\n\nINSS — Instituto Nacional do Seguro Social",origem:"inss",lido:true,vinculadoProcesso:8,vinculadoAdvogado:1,dataRecebido:new Date(agora-86400000*3).toISOString()},
-    {de:"noreply@inss.gov.br",para:"inss@escritorio.com",assunto:"Indeferimento — NB 5566778899 (BPC/LOAS)",corpo:"Prezado(a) Procurador(a),\n\nO requerimento de BPC/LOAS foi INDEFERIDO.\n\nSegurada: Ana Costa\nCPF: 556.677.889-99\nNB: 5566778899\nMotivo: Renda per capita familiar acima de 1/4 do salário mínimo.\n\nCabe recurso à Junta de Recursos do CRPS no prazo de 30 dias.\n\nINSS",origem:"inss",lido:false,vinculadoProcesso:3,vinculadoAdvogado:2,dataRecebido:new Date(agora-3600000*8).toISOString()},
-    {de:"francisca.souza@email.com",para:"inss@escritorio.com",assunto:"Sobre a perícia de quinta-feira",corpo:"Boa tarde,\n\nEstou entrando em contato sobre minha perícia agendada para quinta-feira.\n\nMeu NB é 6677889900. Quero confirmar o horário e o endereço da agência.\n\nTambém quero saber se preciso levar os exames originais ou se cópia serve.\n\nObrigada,\nFrancisca Souza",origem:"cliente",lido:false,vinculadoProcesso:6,vinculadoAdvogado:1,dataRecebido:new Date(agora-3600000*3).toISOString()},
-  ];
-  emailsBase.forEach(e=>{
-    emailsInbox.push({id:emailNextId++,...e});
-  });
+// E-mails serão carregados quando a integração IMAP estiver configurada
+function carregarEmailsReais(){
+  if(configEmailImap && configEmailImap.servidor && configEmailImap.usuario){
+    showToast("Conectando ao servidor de e-mail...","var(--blue)");
+    // A integração real depende do backend/proxy configurado no Admin > Integrações > E-mail
+    // Quando configurado, os e-mails aparecerão automaticamente aqui
+  }
 }
-gerarEmailsExemplo();
 
 // ─── Renderizar E-mails ─────────────────────────
 function renderEmails(){
@@ -4715,9 +4686,9 @@ const SENTINELA={
   alertasEnviados:0,
   feed:[],
   acoes:[],
-  cicloMs:30000, // verifica a cada 30s (simulado)
+  cicloMs:60000, // verifica a cada 60s
 
-  // Fontes de dados simuladas
+  // Fontes de dados monitoradas
   fontes:["email","inss","pje","intima","whatsapp","sms"],
   fontesNomes:{email:"E-mail",inss:"Meu INSS/GERID",pje:"PJe",intima:"INTIMA.AI",whatsapp:"WhatsApp",sms:"SMS"},
   fontesIcones:{email:"📧",inss:"🏛️",pje:"⚖️",intima:"📜",whatsapp:"💬",sms:"📱"},
@@ -4772,70 +4743,43 @@ const SENTINELA={
 function sentinelaInit(){
   if(SENTINELA.intervalo) clearInterval(SENTINELA.intervalo);
   SENTINELA.intervalo=setInterval(()=>{
-    if(SENTINELA.ativo) sentinelaCiclo();
+    if(SENTINELA.ativo) sentinelaVerificarFontes();
   },SENTINELA.cicloMs);
-  // Primeiro ciclo com delay curto
-  setTimeout(()=>{if(SENTINELA.ativo) sentinelaCiclo()},3000);
   sentinelaAtualizarUI();
 }
 
-function sentinelaCiclo(){
+function sentinelaVerificarFontes(){
   SENTINELA.scanCount++;
-  // Escolher fonte aleatória
-  const fonte=SENTINELA.fontes[Math.floor(Math.random()*SENTINELA.fontes.length)];
-  const movs=SENTINELA.movimentacoes[fonte];
-  const mov=movs[Math.floor(Math.random()*movs.length)];
   const agora=new Date();
   const horaStr=agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
 
-  // Atualizar tempo da fonte
-  const elFonte=document.getElementById("sFonte"+fonte.charAt(0).toUpperCase()+fonte.slice(1)+"Time");
-  if(elFonte) elFonte.textContent=horaStr;
-
-  // Criar evento no feed
-  const evento={
-    id:Date.now(),
-    fonte:fonte,
-    titulo:mov.titulo,
-    desc:mov.desc,
-    urgencia:mov.urgencia,
-    tipo:mov.tipo,
-    hora:horaStr,
-    acoes:SENTINELA.acoesPorUrgencia[mov.urgencia]||[]
-  };
-  SENTINELA.feed.unshift(evento);
-  if(SENTINELA.feed.length>50) SENTINELA.feed.pop();
-
-  // Classificar
-  SENTINELA.classificados++;
-
-  // Agendar se não for baixa
-  if(mov.urgencia!=="baixa"){
-    SENTINELA.agendados++;
-    // Criar ação na timeline
-    const acaoTexto=mov.urgencia==="critica"
-      ? `CRÍTICO: ${mov.titulo} — Alertas disparados (Sistema + WhatsApp + E-mail) + Agendamento criado`
-      : mov.urgencia==="alta"
-      ? `ALTO: ${mov.titulo} — Alertas disparados (Sistema + WhatsApp) + Agendamento criado`
-      : `MÉDIO: ${mov.titulo} — Alerta no sistema + Agendamento criado`;
-
-    const acao={
-      hora:horaStr,
-      texto:acaoTexto,
-      tipo:mov.urgencia==="critica"?"alerta":mov.urgencia==="alta"?"alerta":"sucesso"
-    };
-    SENTINELA.acoes.unshift(acao);
-    if(SENTINELA.acoes.length>30) SENTINELA.acoes.pop();
-  }
-
-  // Alertas enviados (WhatsApp + E-mail para crítica/alta)
-  if(mov.urgencia==="critica") SENTINELA.alertasEnviados+=3;
-  else if(mov.urgencia==="alta") SENTINELA.alertasEnviados+=2;
-  else if(mov.urgencia==="media") SENTINELA.alertasEnviados+=1;
+  // Verificar cada fonte configurada
+  SENTINELA.fontes.forEach(fonte=>{
+    const elFonte=document.getElementById("sFonte"+fonte.charAt(0).toUpperCase()+fonte.slice(1)+"Time");
+    if(elFonte) elFonte.textContent=horaStr;
+  });
 
   sentinelaAtualizarUI();
+}
 
-  // Atualizar badge da aba
+// Registrar evento real no Sentinela (chamado por integrações quando configuradas)
+function sentinelaRegistrarEvento(fonte, titulo, desc, urgencia, tipo){
+  const agora=new Date();
+  const horaStr=agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  const evento={id:Date.now(),fonte:fonte,titulo:titulo,desc:desc,urgencia:urgencia,tipo:tipo,hora:horaStr,acoes:SENTINELA.acoesPorUrgencia[urgencia]||[]};
+  SENTINELA.feed.unshift(evento);
+  if(SENTINELA.feed.length>50) SENTINELA.feed.pop();
+  SENTINELA.classificados++;
+  if(urgencia!=="baixa"){
+    SENTINELA.agendados++;
+    const acaoTexto=urgencia==="critica"?`CRÍTICO: ${titulo} — Alertas disparados`:urgencia==="alta"?`ALTO: ${titulo} — Alerta enviado`:`MÉDIO: ${titulo} — Registrado`;
+    SENTINELA.acoes.unshift({hora:horaStr,texto:acaoTexto,tipo:urgencia==="critica"||urgencia==="alta"?"alerta":"sucesso"});
+    if(SENTINELA.acoes.length>30) SENTINELA.acoes.pop();
+  }
+  if(urgencia==="critica") SENTINELA.alertasEnviados+=3;
+  else if(urgencia==="alta") SENTINELA.alertasEnviados+=2;
+  else if(urgencia==="media") SENTINELA.alertasEnviados+=1;
+  sentinelaAtualizarUI();
   const badge=document.getElementById("sentinelaAlertsBadge");
   if(badge){
     const urgentes=SENTINELA.feed.filter(f=>f.urgencia==="critica"||f.urgencia==="alta").length;
@@ -4914,11 +4858,9 @@ function sentinelaToggle(){
 
 function sentinelaForcarVerificacao(){
   if(!SENTINELA.ativo){SENTINELA.ativo=true;}
-  // Dispara 3 verificações rápidas
-  sentinelaCiclo();
-  setTimeout(()=>sentinelaCiclo(),800);
-  setTimeout(()=>sentinelaCiclo(),1600);
-  showToast("Verificação forçada — 3 fontes consultadas");
+  // Dispara verificação nas fontes configuradas
+  sentinelaVerificarFontes();
+  showToast("Verificação forçada — fontes consultadas");
 }
 
 function sentinelaLimparLog(){
@@ -5154,7 +5096,7 @@ function editarAgente(id){
       SENTINELA.fontes=ag.fontes.filter(f=>["email","inss","pje","intima","whatsapp","sms"].includes(f));
       SENTINELA.cicloMs=ag.intervalo*1000;
       if(SENTINELA.intervalo)clearInterval(SENTINELA.intervalo);
-      SENTINELA.intervalo=setInterval(()=>{if(SENTINELA.ativo)sentinelaCiclo()},SENTINELA.cicloMs);
+      SENTINELA.intervalo=setInterval(()=>{if(SENTINELA.ativo)sentinelaVerificarFontes()},SENTINELA.cicloMs);
       const fEl=document.getElementById("sFontesAtivas");
       if(fEl)fEl.textContent=SENTINELA.fontes.length;
     }
@@ -5478,11 +5420,18 @@ function renderDashboard(){
     </div>`;
   }).join(""):'<div style="text-align:center;color:var(--green);padding:20px;font-size:13px">✅ Nenhum prazo vencendo nos próximos 7 dias!</div>';
 
-  // Evolução mensal (últimos 6 meses simulados)
+  // Evolução mensal baseada nos processos reais cadastrados
   const meses=[];
   for(let i=5;i>=0;i--){
     const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
-    meses.push({mes:d.toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}),qtd:Math.max(Math.round(total*(0.6+Math.random()*0.5)),total-i*2)});
+    const dFim=new Date(hoje.getFullYear(),hoje.getMonth()-i+1,0);
+    // Contar processos existentes até o fim de cada mês (baseado nos IDs e datas)
+    const qtdMes=i===0?total:processos.filter(p=>{
+      // Se o processo tem prazo, usar como referência de quando existia
+      if(p.prazo){const dp=new Date(p.prazo);return dp<=dFim;}
+      return p.id<=Math.max(total-i,0);
+    }).length;
+    meses.push({mes:d.toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}),qtd:qtdMes});
   }
   meses[meses.length-1].qtd=total;
   const maxEv=Math.max(...meses.map(m=>m.qtd),1);

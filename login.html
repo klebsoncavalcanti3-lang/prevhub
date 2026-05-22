@@ -95,10 +95,10 @@ if(!TEM_LOCAL_STORAGE||!TEM_SESSION_STORAGE){
 if(TEM_SESSION_STORAGE&&sessionStorage.getItem("acessoprev_sessao")) sessionStorage.removeItem("acessoprev_sessao");
 
 // ─── VERSÃO DO BANCO — auto-reset se incompatível ──
-const VERSAO_DB = "v3";
+const VERSAO_DB = "v4";
 if(localStorage.getItem("prevhub_db_version") !== VERSAO_DB){
   console.log("[PrevHub] Reset de versão: "+localStorage.getItem("prevhub_db_version")+" → "+VERSAO_DB);
-  localStorage.removeItem("prevhub_usuarios");
+  ["prevhub_usuarios","prevhub_processos","prevhub_mensagens","prevhub_colunas","prevhub_tipos","prevhub_configs","prevhub_agenda","prevhub_chat","prevhub_chat_canais","prevhub_documentos"].forEach(k=>localStorage.removeItem(k));
   localStorage.setItem("prevhub_db_version", VERSAO_DB);
 }
 
